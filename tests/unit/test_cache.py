@@ -20,7 +20,8 @@ def cache(tmp_path):
 
 def test_default_cache_dir_uses_platformdirs_by_default():
     d = default_cache_dir()
-    assert d.name == "fishbaseball"
+    # Windows nests an extra "Cache" leaf under the app name (platformdirs convention).
+    assert "fishbaseball" in d.parts
 
 
 def test_default_cache_dir_respects_config_override(tmp_path):
