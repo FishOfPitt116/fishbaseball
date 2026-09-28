@@ -1,0 +1,29 @@
+{
+  "source": "lahman",
+  "latest": "lahman-2026-09-28",
+  "by_schema": {
+    "1": "lahman-2026-09-28"
+  },
+  "releases": [
+    {
+      "tag": "lahman-2026-09-26",
+      "version": "2025",
+      "schema_version": 1,
+      "built_at": "2026-09-26T03:29:16Z",
+      "withdrawn": false
+    },
+    {
+      "tag": "lahman-2026-09-28",
+      "version": "2025",
+      "schema_version": 1,
+      "built_at": "2026-09-28T00:25:04Z",
+      "withdrawn": false
+    }
+  ],
+  "upstream_seen": {
+    "version": "2025",
+    "sha256": "4b57d275ea0be9c3eba51271f70a41a9d5b3cd05233db363ca9ca5207f74e400",
+    "checked_at": "2026-09-28T00:25:04Z"
+  },
+  "updated_at": "2026-09-28T00:25:04Z"
+}

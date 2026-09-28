@@ -1,0 +1,45 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python-version }}"}
+      - run: python -m pip install -e ".[pandas]" -r requirements.txt
+      - run: ruff check .
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      - run: pyright
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      - run: pytest tests/unit
+  integration:
+    # Hits the live published release; informational only, since it depends on GitHub's
+    # availability rather than anything this repo controls.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - id: changed
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -q '^src/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - if: steps.changed.outputs.run == 'true'
+        run: python -m pip install -e ".[pandas]" -r requirements.txt
+      - if: steps.changed.outputs.run == 'true'
+        run: pytest tests/integration

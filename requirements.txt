@@ -1,0 +1,12 @@
+uv
+polars
+pyarrow
+pandas
+httpx
+respx
+platformdirs
+filelock
+pytest
+pytest-cov
+ruff
+pyright
