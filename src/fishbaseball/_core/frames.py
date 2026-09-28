@@ -18,9 +18,13 @@ def to_backend(df: pl.DataFrame, backend: str) -> Any:
 
 
 def filter_values(df: pl.DataFrame, column: str, values: Any) -> pl.DataFrame:
-    """`values` may be `None` (no filter), a single value, or a list/tuple/set of values."""
+    """`values` may be `None` (no filter), a single value, or any non-string iterable of
+    values — a list, tuple, set, `range`, generator, numpy array, and so on. A string or
+    bytes value is treated as one value, not iterated character by character."""
     if values is None:
         return df
-    if not isinstance(values, (list, tuple, set)):
+    if isinstance(values, (str, bytes)) or not hasattr(values, "__iter__"):
         values = [values]
-    return df.filter(pl.col(column).is_in(list(values)))
+    else:
+        values = list(values)
+    return df.filter(pl.col(column).is_in(values))

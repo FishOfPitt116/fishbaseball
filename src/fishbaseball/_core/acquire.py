@@ -17,6 +17,7 @@ Overview (see the design doc for the full decision table):
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import warnings
 from dataclasses import dataclass
@@ -254,8 +255,11 @@ def acquire_table(
         spec, cache, client, version=version, refresh=refresh, offline=offline, now=now
     )
     if table not in manifest["tables"]:
+        close = difflib.get_close_matches(table, manifest["tables"], n=1)
+        hint = f"; did you mean {close[0]!r}?" if close else ""
         raise ValueError(
-            f"unknown table {table!r} for {spec.name}; known tables: {sorted(manifest['tables'])}"
+            f"unknown table {table!r} for {spec.name}{hint} "
+            f"known tables: {sorted(manifest['tables'])}"
         )
     entry = manifest["tables"][table]
     path = cache.table_path(spec.name, resolved.tag, table)

@@ -641,3 +641,30 @@ def test_acquire_table_fetched_at_reflects_file_mtime(cache):
     before = datetime.now(timezone.utc) - timedelta(seconds=5)
     result = acquire_table(SPEC, "batting", cache, client, offline=False, now=NOW)
     assert result.fetched_at >= before
+
+
+def test_acquire_table_unknown_table_suggests_a_close_match(cache):
+    tag = "lahman-2026-10-02"
+    manifest = make_manifest(tag, table_bytes=make_table_bytes())
+    manifest["tables"]["batting_post"] = manifest["tables"]["batting"]
+    client = FakeClient(
+        json_routes={
+            pointer_url(): JsonResponse(json=make_pointer(tag), etag=None, not_modified=False),
+            manifest_url(tag): JsonResponse(json=manifest, etag=None, not_modified=False),
+        }
+    )
+    with pytest.raises(ValueError, match="did you mean 'batting'"):
+        acquire_table(SPEC, "battting", cache, client, offline=False, now=NOW)
+
+
+def test_acquire_table_unknown_table_with_no_close_match_lists_all(cache):
+    tag = "lahman-2026-10-02"
+    manifest = make_manifest(tag, table_bytes=make_table_bytes())
+    client = FakeClient(
+        json_routes={
+            pointer_url(): JsonResponse(json=make_pointer(tag), etag=None, not_modified=False),
+            manifest_url(tag): JsonResponse(json=manifest, etag=None, not_modified=False),
+        }
+    )
+    with pytest.raises(ValueError, match="known tables"):
+        acquire_table(SPEC, "zzzznope", cache, client, offline=False, now=NOW)

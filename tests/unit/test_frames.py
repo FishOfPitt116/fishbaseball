@@ -46,3 +46,24 @@ def test_filter_values_list_of_values():
 def test_filter_values_empty_list_gives_empty_frame():
     out = filter_values(DF, "year_id", [])
     assert out.height == 0
+
+
+def test_filter_values_range():
+    out = filter_values(DF, "year_id", range(1974, 2001))
+    assert set(out["year_id"].to_list()) == {1974}
+
+
+def test_filter_values_generator():
+    out = filter_values(DF, "year_id", (y for y in (1927, 2001)))
+    assert set(out["year_id"].to_list()) == {1927, 2001}
+
+
+def test_filter_values_numpy_array():
+    np = pytest.importorskip("numpy")
+    out = filter_values(DF, "year_id", np.array([1927, 2001]))
+    assert set(out["year_id"].to_list()) == {1927, 2001}
+
+
+def test_filter_values_string_is_still_one_value_not_iterated_over_chars():
+    out = filter_values(DF, "player_id", "ruthba01")
+    assert out["player_id"].to_list() == ["ruthba01"]

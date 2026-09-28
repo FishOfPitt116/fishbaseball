@@ -133,3 +133,12 @@ def test_load_player_filter_style_via_seasons_and_manual_filter(fixtures):
     mock_routes(respx.mock, fixtures)
     df = lahman.load("batting").filter(pl.col("player_id") == "bondsba01")
     assert set(df["year_id"].to_list()) & {2001}
+
+
+def test_namespace_has_no_leaked_internal_names():
+    # `annotations` is `from __future__ import annotations`'s own binding, present in every
+    # module that uses it — not an internal helper, and not worth suppressing.
+    benign = {"annotations"}
+    public_names = [n for n in dir(lahman) if not n.startswith("_")]
+    leaked = sorted(set(public_names) - set(lahman.__all__) - benign)
+    assert leaked == []
