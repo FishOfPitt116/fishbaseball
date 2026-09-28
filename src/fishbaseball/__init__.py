@@ -1,9 +1,7 @@
-"""fishbaseball: baseball data for Python (Lahman now; Retrosheet and Statcast planned).
+"""fishbaseball: baseball data for Python (Lahman now; Retrosheet and Statcast planned)."""
 
-Built up incrementally: `lahman`, `cache` and `sources()` are exposed here as each lands.
-"""
-
-from fishbaseball import config
+from fishbaseball import cache, config, lahman
 from fishbaseball._version import __version__
+from fishbaseball.sources import sources
 
-__all__ = ["__version__", "config"]
+__all__ = ["__version__", "config", "cache", "lahman", "sources"]
