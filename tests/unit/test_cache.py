@@ -148,26 +148,35 @@ def test_purge_missing_source_is_a_noop(cache):
     cache.purge("nope")  # doesn't raise
 
 
-def test_info_lists_a_row_per_cached_version_with_size(cache):
-    table = cache.table_path("lahman", "t1", "batting")
-    table.parent.mkdir(parents=True)
-    table.write_bytes(b"x" * 100)
+def test_info_lists_one_row_per_table(cache):
+    batting = cache.table_path("lahman", "t1", "batting")
+    batting.parent.mkdir(parents=True)
+    batting.write_bytes(b"x" * 100)
+    people = cache.table_path("lahman", "t1", "people")
+    people.write_bytes(b"y" * 40)
     cache.write_json_atomic(cache.manifest_path("lahman", "t1"), {"tag": "t1"})
     rows = cache.info()
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["source"] == "lahman" and row["version"] == "t1"
-    assert row["bytes"] >= 100
-    assert row["tables"] == 1
+    assert len(rows) == 2
+    by_table = {r["table"]: r for r in rows}
+    assert by_table["batting"]["source"] == "lahman" and by_table["batting"]["version"] == "t1"
+    assert by_table["batting"]["bytes"] == 100
+    assert by_table["people"]["bytes"] == 40
 
 
 def test_info_is_empty_for_a_fresh_cache(cache):
     assert cache.info() == []
 
 
+def test_info_ignores_a_version_with_no_downloaded_tables(cache):
+    cache.write_json_atomic(cache.manifest_path("lahman", "t1"), {"tag": "t1"})
+    assert cache.info() == []
+
+
 def test_info_lists_multiple_sources_and_versions(cache):
     for source, tag in [("lahman", "t1"), ("lahman", "t2"), ("retrosheet", "t1")]:
-        cache.write_json_atomic(cache.manifest_path(source, tag), {"tag": tag})
+        table = cache.table_path(source, tag, "batting")
+        table.parent.mkdir(parents=True)
+        table.write_bytes(b"x")
     rows = cache.info()
     assert {(r["source"], r["version"]) for r in rows} == {
         ("lahman", "t1"), ("lahman", "t2"), ("retrosheet", "t1"),

@@ -67,18 +67,43 @@ def test_sources_respects_pandas_backend():
 def test_cache_info_empty_by_default():
     df = fb_cache.info()
     assert isinstance(df, pl.DataFrame) and df.height == 0
-    assert set(df.columns) == {"source", "version", "bytes", "tables"}
+    assert set(df.columns) == {
+        "source", "version", "table", "bytes", "last_checked", "next_check",
+    }  # fmt: skip
 
 
 @respx.mock
-def test_cache_info_after_a_load_has_a_row(fixtures):
+def test_cache_info_after_a_load_has_a_row_per_table(fixtures):
     from fishbaseball import lahman
 
     manifest, tag = _mock(respx.mock, fixtures)
     lahman.load("batting")
+    lahman.load("people")
+    df = fb_cache.info()
+    rows = df.filter(pl.col("source") == "lahman")
+    assert set(rows["table"].to_list()) == {"batting", "people"}
+    row = rows.filter(pl.col("table") == "batting").row(0, named=True)
+    assert row["version"] == tag and row["bytes"] > 0
+
+
+@respx.mock
+def test_cache_info_shows_last_checked_and_next_check(fixtures):
+    from fishbaseball import lahman
+
+    _mock(respx.mock, fixtures)
+    lahman.load("batting")
     df = fb_cache.info()
     row = df.filter(pl.col("source") == "lahman").row(0, named=True)
-    assert row["version"] == tag and row["tables"] == 1 and row["bytes"] > 0
+    assert row["last_checked"] is not None
+    assert row["next_check"] > row["last_checked"]
+
+
+def test_cache_info_last_checked_is_none_when_never_checked():
+    Cache().table_path("lahman", "t1", "batting").parent.mkdir(parents=True)
+    Cache().table_path("lahman", "t1", "batting").write_bytes(b"x")
+    df = fb_cache.info()
+    row = df.row(0, named=True)
+    assert row["last_checked"] is None and row["next_check"] is None
 
 
 # ---- cache.purge() ----------------------------------------------------------------------

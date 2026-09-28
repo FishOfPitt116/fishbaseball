@@ -128,13 +128,13 @@ class Cache:
             return rows
         for source_dir in sorted(p for p in self.root.iterdir() if p.is_dir()):
             for version_dir in sorted(p for p in source_dir.iterdir() if p.is_dir()):
-                files = list(version_dir.iterdir())
-                rows.append(
-                    {
-                        "source": source_dir.name,
-                        "version": version_dir.name,
-                        "bytes": sum(f.stat().st_size for f in files if f.is_file()),
-                        "tables": sum(1 for f in files if f.suffix == ".parquet"),
-                    }
-                )
+                for table_file in sorted(version_dir.glob("*.parquet")):
+                    rows.append(
+                        {
+                            "source": source_dir.name,
+                            "version": version_dir.name,
+                            "table": table_file.stem,
+                            "bytes": table_file.stat().st_size,
+                        }
+                    )
         return rows

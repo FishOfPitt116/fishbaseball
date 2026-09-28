@@ -5,6 +5,7 @@ underneath). Every function here re-resolves `config.get("cache_dir")` on each c
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any
 
 import polars as pl
@@ -16,14 +17,36 @@ from fishbaseball._core.cache import Cache
 from fishbaseball._core.frames import to_backend
 from fishbaseball.sources import REGISTRY
 
-_INFO_SCHEMA = {"source": pl.Utf8, "version": pl.Utf8, "bytes": pl.Int64, "tables": pl.Int64}
+_INFO_SCHEMA = {
+    "source": pl.Utf8,
+    "version": pl.Utf8,
+    "table": pl.Utf8,
+    "bytes": pl.Int64,
+    "last_checked": pl.Datetime(time_zone="UTC"),
+    "next_check": pl.Datetime(time_zone="UTC"),
+}
 
 
 def info() -> Any:
-    """One row per cached (source, version): how many tables and how many bytes are on disk.
-    Empty (but correctly shaped) if nothing has been loaded yet. Reads only the local cache —
-    never makes a network call."""
-    rows = Cache().info()
+    """One row per cached (source, version, table): how big it is on disk, when that source's
+    release pointer was last checked, and when it's next due to be rechecked (`last_checked +
+    fb.config.set(ttl=...)`; both `None` if that source has never been checked). Empty (but
+    correctly shaped) if nothing has been loaded yet. Reads only the local cache — never makes
+    a network call."""
+    cache = Cache()
+    ttl = timedelta(seconds=config.get("ttl"))
+    rows = []
+    for row in cache.info():
+        meta = cache.get_metadata(row["source"]) or {}
+        last_checked_raw = meta.get("last_checked")
+        last_checked = datetime.fromisoformat(last_checked_raw) if last_checked_raw else None
+        rows.append(
+            {
+                **row,
+                "last_checked": last_checked,
+                "next_check": last_checked + ttl if last_checked else None,
+            }
+        )
     df = pl.DataFrame(rows, schema=_INFO_SCHEMA) if rows else pl.DataFrame(schema=_INFO_SCHEMA)
     return to_backend(df, config.get("backend"))
 
