@@ -1,0 +1,22 @@
+name: canaries
+on:
+  schedule: [{cron: "5 15 * * *"}]  # daily; after fishbaseball-data's publish/canary schedules
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      # Installs from PyPI, not this checkout, so it exercises what users actually get.
+      - run: pip install fishbaseball
+      - name: Run canary and alert (opens/comments/closes a "canary" issue)
+        run: >
+          python scripts/canary.py --alert
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
