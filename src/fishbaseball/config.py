@@ -36,14 +36,25 @@ def _check_key(key: str) -> None:
 
 
 def get(key: str) -> Any:
-    """The current value of a setting."""
+    """The current value of a setting (see `set()` for the full list of keys)."""
     _check_key(key)
     return getattr(_config, key)
 
 
 def set(**kwargs: Any) -> None:  # noqa: A001 - `fb.config.set(...)` is the intended spelling
-    """Update one or more settings. Rejects unknown keys and invalid values; on a rejection,
-    no setting from this call is applied (partial updates never happen)."""
+    """Update one or more settings by keyword. Rejects unknown keys and invalid values; on a
+    rejection, no setting from this call is applied (partial updates never happen).
+
+    Keys:
+        backend: `"polars"` (default) or `"pandas"` — what `load()` and friends return.
+        cache_dir: where downloaded data is cached. `None` (default) uses the per-OS default
+            (`platformdirs.user_cache_dir("fishbaseball")`); any path-like value overrides it.
+        offline: default for every call's `offline` argument unless overridden per call.
+            `True` never touches the network; cached data is used, or `DataNotAvailableError`.
+        strict: `False` (default) means a stale or failed refresh falls back to the newest
+            good cached data with a `StaleDataWarning`. `True` raises instead of warning.
+        ttl: seconds a release pointer is trusted before it's rechecked (default 7 days).
+    """
     updates: dict[str, Any] = {}
     for key, value in kwargs.items():
         _check_key(key)

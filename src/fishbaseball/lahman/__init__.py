@@ -22,7 +22,8 @@ from fishbaseball.lahman._source import SOURCE
 
 
 def tables() -> list[str]:
-    """Every table name in the currently resolved release's manifest."""
+    """Every table name valid for `load()`, from the currently resolved release's manifest —
+    so a table added upstream shows up here without a fishbaseball release."""
     manifest, _ = acquire_manifest(SOURCE, Cache(), get_client())
     return sorted(manifest["tables"])
 
@@ -77,9 +78,26 @@ def load(
 ) -> Any:
     """A Lahman table, in the backend `fb.config.set(backend=...)` selects (default polars).
 
-    `seasons` filters on the table's season column (a single year or a list); tables with no
-    season column (e.g. `people`) raise `ValueError` if `seasons` is given. `version` pins to
-    an exact release date (`"2026-10-02"`) or a SABR version (`"2025"`, its newest release).
+    Args:
+        table: a name from `tables()`, e.g. `"batting"`. Most tables also have a dedicated
+            function (`fb.lahman.batting(...)`, etc.) with convenient built-in filters;
+            `load()` is the general form that always works.
+        seasons: filter to one season or a list of seasons, on the table's season column.
+            `ValueError` if the table has no season column (e.g. `people`) and this is given.
+        version: pin to an exact release date (`"2026-10-02"`) or a SABR version
+            (`"2025"`, resolving to that version's newest release). `None` (default) uses the
+            newest release this version of fishbaseball can read.
+        refresh: check for a newer release now, instead of waiting out the cache TTL
+            (`fb.config.set(ttl=...)`).
+        offline: `True` never touches the network — cached data only, or `DataNotAvailableError`.
+            `None` (default) uses `fb.config.set(offline=...)`, itself default `False`.
+        return_provenance: if `True`, return `(df, Provenance)` instead of just `df`.
+
+    Returns:
+        The table as a DataFrame, or `(df, Provenance)` if `return_provenance=True`. If the
+        resolved release can't be fetched or fails verification, the newest still-good cached
+        release is served instead, with a `StaleDataWarning` (`fb.config.set(strict=True)`
+        raises instead of warning).
     """
     df, manifest, acquired = _load_raw(
         table, seasons=seasons, version=version, refresh=refresh, offline=offline
@@ -88,13 +106,17 @@ def load(
 
 
 def version(*, refresh: bool = False) -> str:
-    """The release tag `load()` would currently use."""
+    """The release tag `load()` would currently use, e.g. `"lahman-2026-09-28"`. Subject to the
+    same cache/TTL behavior as `load()`; pass `refresh=True` to check for a newer one first."""
     _, resolved = acquire_manifest(SOURCE, Cache(), get_client(), refresh=refresh)
     return resolved.tag
 
 
 def releases(*, refresh: bool = False) -> Any:
-    """Every known release: tag, upstream version, schema version, build time, withdrawn."""
+    """Every known release, as a DataFrame with one row per release: `tag`, `version` (the
+    upstream/SABR version), `schema_version`, `built_at` and `withdrawn`. Use `tag` or
+    `version` with `load(..., version=...)` to pin to one. Respects `fb.config.set(offline=...)`
+    and the usual TTL; pass `refresh=True` to check for new releases first."""
     now = datetime.now(timezone.utc)
     offline = config.get("offline")
     pointer = acquire_pointer(

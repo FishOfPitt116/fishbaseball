@@ -39,6 +39,10 @@ def _local_version(cache: Cache, source: str) -> str | None:
 
 
 def sources() -> Any:
+    """One row per known source: `local` (the newest release actually cached on disk),
+    `latest` (what the last-seen pointer says is published), `released` (that release's build
+    time) and `last_checked` (when the pointer was last refreshed). All `None` for a source
+    that has never been loaded. Reads only the local cache — never makes a network call."""
     cache = Cache()
     rows = []
     for name in sorted(REGISTRY):

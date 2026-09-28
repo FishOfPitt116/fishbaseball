@@ -20,12 +20,18 @@ _INFO_SCHEMA = {"source": pl.Utf8, "version": pl.Utf8, "bytes": pl.Int64, "table
 
 
 def info() -> Any:
+    """One row per cached (source, version): how many tables and how many bytes are on disk.
+    Empty (but correctly shaped) if nothing has been loaded yet. Reads only the local cache —
+    never makes a network call."""
     rows = Cache().info()
     df = pl.DataFrame(rows, schema=_INFO_SCHEMA) if rows else pl.DataFrame(schema=_INFO_SCHEMA)
     return to_backend(df, config.get("backend"))
 
 
 def purge(source: str | None = None, version: str | None = None) -> None:
+    """Delete cached data. With neither argument, clears the entire cache. With `source` only,
+    clears everything for that source. With both, clears just that one cached release,
+    leaving the rest of `source`'s cache (and its pointer/metadata) untouched."""
     Cache().purge(source, version=version)
 
 
