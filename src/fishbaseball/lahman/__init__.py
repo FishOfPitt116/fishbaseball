@@ -27,21 +27,18 @@ def tables() -> list[str]:
     return sorted(manifest["tables"])
 
 
-def load(
+def _load_raw(
     table: str,
     *,
     seasons: Any = None,
     version: str | None = None,
     refresh: bool = False,
     offline: bool | None = None,
-    return_provenance: bool = False,
-) -> Any:
-    """A Lahman table, in the backend `fb.config.set(backend=...)` selects (default polars).
-
-    `seasons` filters on the table's season column (a single year or a list); tables with no
-    season column (e.g. `people`) raise `ValueError` if `seasons` is given. `version` pins to
-    an exact release date (`"2026-10-02"`) or a SABR version (`"2025"`, its newest release).
-    """
+) -> tuple[pl.DataFrame, dict[str, Any], Any]:
+    """`load()`'s work up to (not including) backend conversion, shared with the per-table
+    wrappers in `_tables.py` so they can apply their own filters in polars first — converting
+    to the configured backend, then filtering with polars-only expressions, would break the
+    pandas backend."""
     cache = Cache()
     acquired = acquire_table(
         SOURCE, table, cache, get_client(),
@@ -57,11 +54,37 @@ def load(
         if season_column is None:
             raise ValueError(f"{table!r} has no season column; `seasons` doesn't apply to it")
         df = filter_values(df, season_column, seasons)
+    return df, manifest, acquired
 
+
+def _finish(
+    df: pl.DataFrame, table: str, manifest: dict[str, Any], acquired: Any, return_provenance: bool
+) -> Any:
     out = to_backend(df, config.get("backend"))
     if return_provenance:
         return out, build_provenance(SOURCE.name, table, manifest, acquired)
     return out
+
+
+def load(
+    table: str,
+    *,
+    seasons: Any = None,
+    version: str | None = None,
+    refresh: bool = False,
+    offline: bool | None = None,
+    return_provenance: bool = False,
+) -> Any:
+    """A Lahman table, in the backend `fb.config.set(backend=...)` selects (default polars).
+
+    `seasons` filters on the table's season column (a single year or a list); tables with no
+    season column (e.g. `people`) raise `ValueError` if `seasons` is given. `version` pins to
+    an exact release date (`"2026-10-02"`) or a SABR version (`"2025"`, its newest release).
+    """
+    df, manifest, acquired = _load_raw(
+        table, seasons=seasons, version=version, refresh=refresh, offline=offline
+    )
+    return _finish(df, table, manifest, acquired, return_provenance)
 
 
 def version(*, refresh: bool = False) -> str:
@@ -89,4 +112,8 @@ def releases(*, refresh: bool = False) -> Any:
     return to_backend(df, config.get("backend"))
 
 
-__all__ = ["tables", "load", "version", "releases", "Provenance"]
+from fishbaseball.lahman import _tables as _tables  # noqa: E402 - after _load_raw/_finish exist
+from fishbaseball.lahman._tables import *  # noqa: E402, F403
+
+__all__: list[str] = ["tables", "load", "version", "releases", "Provenance"]
+__all__.extend(_tables.__all__)
