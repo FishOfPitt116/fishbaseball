@@ -78,5 +78,8 @@ def test_offline_with_a_never_loaded_source_and_empty_cache_raises(tmp_path):
 def test_cache_info_reflects_real_loads():
     lahman.load("salaries")
     df = fb_cache.info()
-    row = df.filter(pl.col("source") == "lahman").row(0, named=True)
-    assert row["tables"] >= 1 and row["bytes"] > 0
+    row = df.filter((pl.col("source") == "lahman") & (pl.col("table") == "salaries")).row(
+        0, named=True
+    )
+    assert row["bytes"] > 0
+    assert row["last_checked"] is not None and row["next_check"] > row["last_checked"]
