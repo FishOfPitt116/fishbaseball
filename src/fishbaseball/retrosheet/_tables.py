@@ -61,7 +61,21 @@ def _either(columns: tuple[str, str], values: Any) -> pl.Expr | None:
     return pl.col(columns[0]).is_in(wanted) | pl.col(columns[1]).is_in(wanted)
 
 
-def _game_type(values: Any) -> pl.Expr | None:
+class _DefaultGameType:
+    """The `game_type` default: `"regular"`, unless a `game_id` is given. Asking for a game by
+    its id means that game, whatever kind it was, so the default must not filter out a World
+    Series game; an explicitly passed `game_type` (even `"regular"`) always applies."""
+
+    def __repr__(self) -> str:
+        return "'regular' (no filter when game_id is given)"
+
+
+DEFAULT_GAME_TYPE: Any = _DefaultGameType()
+
+
+def _game_type(values: Any, game_id: Any = None) -> pl.Expr | None:
+    if values is DEFAULT_GAME_TYPE:
+        values = None if game_id is not None else "regular"
     if values is None:
         return None
     wanted = as_list(values)
@@ -139,7 +153,7 @@ def plays(
     *,
     team: Any = None,
     game_id: Any = None,
-    game_type: Any = "regular",
+    game_type: Any = DEFAULT_GAME_TYPE,
     columns: Any = None,
     lazy: bool = False,
     all_seasons: bool = False,
@@ -161,8 +175,10 @@ def plays(
       or the pitching team, i.e. every play of that team's games. For one side only,
       filter `batteam` / `pitteam` on the result.
     * `game_id`: a Retrosheet game id (`gid`) such as `"NYA195610080"`.
-    * `game_type`: default `"regular"`, the regular season only (so the two 1933 games with
-      no recorded game type are excluded); `None` for every game type; or one or a list of
+    * `game_type`: default `"regular"`, the regular season only, except that giving `game_id`
+      switches the default off so a postseason game is found by its id (the default
+      also leaves out the two 1933 games with no recorded game type);
+      `None` for every game type; or one or a list of
       `"regular"`, `"worldseries"`, `"lcs"`, `"divisionseries"`, `"wildcard"`, `"allstar"`,
       `"exhibition"`, `"playoff"`, `"championship"`.
     * `columns`: keep only these columns, in this order.
@@ -184,7 +200,7 @@ def plays(
         conditions=[
             _either(("batteam", "pitteam"), team),
             _isin("gid", game_id),
-            _game_type(game_type),
+            _game_type(game_type, game_id),
         ],
         filters=("team", "game_id", "game_type"),
         load_kwargs=load_kwargs,
@@ -196,7 +212,7 @@ def game_info(
     *,
     team: Any = None,
     game_id: Any = None,
-    game_type: Any = "regular",
+    game_type: Any = DEFAULT_GAME_TYPE,
     columns: Any = None,
     lazy: bool = False,
     **load_kwargs: Any,
@@ -212,8 +228,10 @@ def game_info(
     * `team`: a team id such as `"PIT"`; matches games where it is **either** the visitor
       (`visteam`) or the home team (`hometeam`).
     * `game_id`: a Retrosheet game id (`gid`).
-    * `game_type`: default `"regular"` (regular season only; this also excludes the two 1933
-      games with no recorded game type); `None` for every game type; or one or a list of
+    * `game_type`: default `"regular"` (regular season only, except that giving `game_id`
+      switches the default off so a postseason game is found by its id; the default also
+      excludes the two 1933 games with no recorded game type);
+      `None` for every game type; or one or a list of
       `"regular"`, `"worldseries"`, `"lcs"`, `"divisionseries"`, `"wildcard"`, `"allstar"`,
       `"exhibition"`, `"playoff"`, `"championship"`.
     * `columns`: keep only these columns, in this order.
@@ -234,7 +252,7 @@ def game_info(
         conditions=[
             _either(("visteam", "hometeam"), team),
             _isin("gid", game_id),
-            _game_type(game_type),
+            _game_type(game_type, game_id),
         ],
         filters=("team", "game_id", "game_type"),
         load_kwargs=load_kwargs,
@@ -246,7 +264,7 @@ def team_stats(
     *,
     team: Any = None,
     game_id: Any = None,
-    game_type: Any = "regular",
+    game_type: Any = DEFAULT_GAME_TYPE,
     stattype: Any = "value",
     columns: Any = None,
     lazy: bool = False,
@@ -266,8 +284,10 @@ def team_stats(
     * `team`: a team id such as `"PIT"`: that team's row in each game (the opponent is in
       `opp`).
     * `game_id`: a Retrosheet game id (`gid`).
-    * `game_type`: default `"regular"` (regular season only; this also excludes the two 1933
-      games with no recorded game type); `None` for every game type; or one or a list of
+    * `game_type`: default `"regular"` (regular season only, except that giving `game_id`
+      switches the default off so a postseason game is found by its id; the default also
+      excludes the two 1933 games with no recorded game type);
+      `None` for every game type; or one or a list of
       `"regular"`, `"worldseries"`, `"lcs"`, `"divisionseries"`, `"wildcard"`, `"allstar"`,
       `"exhibition"`, `"playoff"`, `"championship"`.
     * `stattype`: default `"value"`, Retrosheet's best estimate of each figure; `"official"`
@@ -291,7 +311,7 @@ def team_stats(
         conditions=[
             _isin("team", team),
             _isin("gid", game_id),
-            _game_type(game_type),
+            _game_type(game_type, game_id),
             _isin("stattype", stattype),
         ],
         filters=("team", "game_id", "game_type", "stattype"),
@@ -308,7 +328,7 @@ def batting(
     player_id: Any = None,
     team: Any = None,
     game_id: Any = None,
-    game_type: Any = "regular",
+    game_type: Any = DEFAULT_GAME_TYPE,
     stattype: Any = "value",
     columns: Any = None,
     lazy: bool = False,
@@ -334,8 +354,10 @@ def batting(
     * `team`: a team id such as `"PIT"`: the team the batter played for in that game (the
       opponent is in `opp`).
     * `game_id`: a Retrosheet game id (`gid`).
-    * `game_type`: default `"regular"` (regular season only; this also excludes the two 1933
-      games with no recorded game type); `None` for every game type; or one or a list of
+    * `game_type`: default `"regular"` (regular season only, except that giving `game_id`
+      switches the default off so a postseason game is found by its id; the default also
+      excludes the two 1933 games with no recorded game type);
+      `None` for every game type; or one or a list of
       `"regular"`, `"worldseries"`, `"lcs"`, `"divisionseries"`, `"wildcard"`, `"allstar"`,
       `"exhibition"`, `"playoff"`, `"championship"`.
     * `stattype`: default `"value"`, Retrosheet's best estimate of each figure; `"official"`
@@ -360,7 +382,7 @@ def batting(
             _isin("id", player_id),
             _isin("team", team),
             _isin("gid", game_id),
-            _game_type(game_type),
+            _game_type(game_type, game_id),
             _isin("stattype", stattype),
         ],
         filters=("player_id", "team", "game_id", "game_type", "stattype"),
@@ -374,7 +396,7 @@ def pitching(
     player_id: Any = None,
     team: Any = None,
     game_id: Any = None,
-    game_type: Any = "regular",
+    game_type: Any = DEFAULT_GAME_TYPE,
     stattype: Any = "value",
     columns: Any = None,
     lazy: bool = False,
@@ -398,8 +420,10 @@ def pitching(
       these to Lahman's `player_id`.
     * `team`: a team id such as `"PIT"`: the team the pitcher pitched for in that game.
     * `game_id`: a Retrosheet game id (`gid`).
-    * `game_type`: default `"regular"` (regular season only; this also excludes the two 1933
-      games with no recorded game type); `None` for every game type; or one or a list of
+    * `game_type`: default `"regular"` (regular season only, except that giving `game_id`
+      switches the default off so a postseason game is found by its id; the default also
+      excludes the two 1933 games with no recorded game type);
+      `None` for every game type; or one or a list of
       `"regular"`, `"worldseries"`, `"lcs"`, `"divisionseries"`, `"wildcard"`, `"allstar"`,
       `"exhibition"`, `"playoff"`, `"championship"`.
     * `stattype`: default `"value"`, Retrosheet's best estimate of each figure; `"official"`
@@ -424,7 +448,7 @@ def pitching(
             _isin("id", player_id),
             _isin("team", team),
             _isin("gid", game_id),
-            _game_type(game_type),
+            _game_type(game_type, game_id),
             _isin("stattype", stattype),
         ],
         filters=("player_id", "team", "game_id", "game_type", "stattype"),
@@ -439,7 +463,7 @@ def fielding(
     team: Any = None,
     game_id: Any = None,
     position: Any = None,
-    game_type: Any = "regular",
+    game_type: Any = DEFAULT_GAME_TYPE,
     stattype: Any = "value",
     columns: Any = None,
     lazy: bool = False,
@@ -466,8 +490,10 @@ def fielding(
     * `game_id`: a Retrosheet game id (`gid`).
     * `position`: a position number 1-9 (column `d_pos`) or its abbreviation: `"P"`, `"C"`,
       `"1B"`, `"2B"`, `"3B"`, `"SS"`, `"LF"`, `"CF"`, `"RF"`.
-    * `game_type`: default `"regular"` (regular season only; this also excludes the two 1933
-      games with no recorded game type); `None` for every game type; or one or a list of
+    * `game_type`: default `"regular"` (regular season only, except that giving `game_id`
+      switches the default off so a postseason game is found by its id; the default also
+      excludes the two 1933 games with no recorded game type);
+      `None` for every game type; or one or a list of
       `"regular"`, `"worldseries"`, `"lcs"`, `"divisionseries"`, `"wildcard"`, `"allstar"`,
       `"exhibition"`, `"playoff"`, `"championship"`.
     * `stattype`: default `"value"`, Retrosheet's best estimate of each figure; `"official"`
@@ -493,7 +519,7 @@ def fielding(
             _isin("team", team),
             _isin("gid", game_id),
             _position(position),
-            _game_type(game_type),
+            _game_type(game_type, game_id),
             _isin("stattype", stattype),
         ],
         filters=("player_id", "team", "game_id", "position", "game_type", "stattype"),

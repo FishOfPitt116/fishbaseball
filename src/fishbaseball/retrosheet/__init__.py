@@ -4,7 +4,7 @@
     import fishbaseball as fb
 
     fb.retrosheet.plays(2024, team="PIT")                    # every Pirates play of 2024
-    fb.retrosheet.plays(1956, game_id="NYA195610080", game_type=None)   # Larsen's perfect game
+    fb.retrosheet.plays(1956, game_id="NYA195610080")   # Larsen's perfect game
     fb.retrosheet.batting(1927, player_id="ruthb101")        # one row per game Ruth batted in
     fb.retrosheet.plays(range(2015, 2025), lazy=True)        # a polars LazyFrame, nothing loaded
 
@@ -26,7 +26,8 @@ Three conventions hold for every function here:
   figure; `"official"` and others are available, or `None` for all of them.
 * **`game_type`** defaults to `"regular"` (regular season only); pass `None` for every game
   type, or a list such as `["regular", "worldseries"]`. Two 1933 games with no recorded game
-  type are therefore excluded by default.
+  type are therefore excluded by default. Giving a `game_id` switches the default off, so a
+  game found by its id is returned whatever kind of game it was.
 
 Player ids are Retrosheet's (`ruthb101`) and returned as-is; Lahman's `people.retro_id` joins
 them to Lahman's `player_id`.

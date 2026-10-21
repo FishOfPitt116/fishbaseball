@@ -354,3 +354,32 @@ def test_provenance_for_a_whole_file_table_has_no_partitions(mock_release):
 def test_lazy_results_carry_provenance_too(mock_release):
     lf, prov = retrosheet.plays(1956, lazy=True, return_provenance=True)
     assert isinstance(lf, pl.LazyFrame) and prov.partitions[0].partition == "1956"
+
+
+# ---- game_id and the game_type default ------------------------------------------------------
+
+LARSEN = "NYA195610080"  # a 1956 World Series game
+
+
+def test_asking_for_a_game_by_id_ignores_the_regular_season_default(mock_release):
+    assert retrosheet.plays(1956, game_id=LARSEN).height == 56
+    assert retrosheet.game_info(1956, game_id=LARSEN)["gid"].to_list() == [LARSEN]
+    assert retrosheet.batting(1956, game_id=LARSEN, team="BRO")["b_pa"].sum() == 27
+    assert retrosheet.pitching(1956, game_id=LARSEN).height == 2
+    assert retrosheet.fielding(1956, game_id=LARSEN).height > 0
+    assert retrosheet.team_stats(1956, game_id=LARSEN).height == 2
+
+
+def test_game_id_lists_also_skip_the_default(mock_release):
+    assert retrosheet.plays(1956, game_id=[LARSEN]).height == 56
+
+
+def test_an_explicit_game_type_still_applies_with_a_game_id(mock_release):
+    assert retrosheet.plays(1956, game_id=LARSEN, game_type="regular").height == 0
+    assert retrosheet.plays(1956, game_id=LARSEN, game_type="worldseries").height == 56
+    assert retrosheet.plays(1956, game_id=LARSEN, game_type=None).height == 56
+
+
+def test_without_a_game_id_the_default_is_still_the_regular_season(mock_release):
+    assert set(retrosheet.plays(1956)["gametype"]) == {"regular"}
+    assert set(retrosheet.game_info(1956)["gametype"]) == {"regular"}

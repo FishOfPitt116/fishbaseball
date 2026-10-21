@@ -95,7 +95,7 @@ import polars as pl
 import fishbaseball as fb
 
 fb.retrosheet.plays(2024, team="PIT")  # every play of the Pirates' 2024 games
-fb.retrosheet.plays(1956, game_id="NYA195610080", game_type=None)  # Larsen's perfect game
+fb.retrosheet.plays(1956, game_id="NYA195610080")  # Larsen's perfect game
 fb.retrosheet.batting(1927, player_id="ruthb101")["b_hr"].sum()  # 60: sum the per-game rows
 ```
 
@@ -137,7 +137,8 @@ query needs are ever read (it needs the polars backend). `columns=[...]` project
 
 ### `game_type` and `stattype`
 
-- `game_type` defaults to `"regular"`, the regular season only. Pass `None` for every game, or
+- `game_type` defaults to `"regular"`, the regular season only (but giving a `game_id` switches
+  the default off, so a World Series game is found by its id). Pass `None` for every game, or
   one or a list of `"regular"`, `"worldseries"`, `"lcs"`, `"divisionseries"`, `"wildcard"`,
   `"allstar"`, `"exhibition"`, `"playoff"`, `"championship"`. (Two 1933 games have no recorded
   game type, so the default leaves them out.)
