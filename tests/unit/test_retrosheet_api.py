@@ -1,16 +1,11 @@
-import json
-
-import httpx
 import pandas as pd
 import polars as pl
 import pytest
-import respx
 
 from fishbaseball import config, retrosheet
-from fishbaseball._core.acquire import manifest_url, pointer_url
 from fishbaseball._core.provenance import Provenance
 from fishbaseball.exceptions import DataNotAvailableError
-from fishbaseball.retrosheet._source import SOURCE
+from tests.conftest import data_requests
 
 RETRO_TABLES = [
     "all_players",
@@ -22,31 +17,6 @@ RETRO_TABLES = [
     "team_stats",
 ]
 PARTITIONED = ["batting", "fielding", "pitching", "plays", "team_stats"]
-
-
-@pytest.fixture
-def mock_release(retro_fixtures):
-    """Route the pointer, manifest and every data file to the Retrosheet fixtures, inside an
-    active `respx` mock. Yields the manifest; `mock.calls` shows what was requested."""
-    manifest = json.loads((retro_fixtures / "manifest.json").read_text())
-    pointer = json.loads((retro_fixtures / "latest.json").read_text())
-    with respx.mock(assert_all_called=False) as mock:
-        mock.get(pointer_url(SOURCE)).mock(return_value=httpx.Response(200, json=pointer))
-        mock.get(manifest_url(SOURCE, manifest["tag"])).mock(
-            return_value=httpx.Response(200, json=manifest)
-        )
-        for entry in manifest["tables"].values():
-            for e in entry["partitions"].values() if entry.get("partitioned") else [entry]:
-                body = (retro_fixtures / e["file"]).read_bytes()
-                mock.get(e["url"]).mock(return_value=httpx.Response(200, content=body))
-        mock.manifest = manifest  # type: ignore[attr-defined]
-        yield mock
-
-
-def data_requests(mock, since: int = 0) -> list[str]:
-    """Data-file URLs requested so far (or after the first `since` calls)."""
-    urls = [str(c.request.url) for c in list(mock.calls)[since:]]
-    return [u for u in urls if u.endswith(".parquet")]
 
 
 def fixture_df(retro_fixtures, name: str) -> pl.DataFrame:

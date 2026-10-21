@@ -2,7 +2,8 @@
 data. Not part of the package — run directly (`python scripts/canary.py`), never imported by
 `fishbaseball` itself, so it never ships in the wheel.
 
-Checks:
+Checks, for each of Lahman and Retrosheet (the latter skipped, with a note, if the installed
+package predates `fb.retrosheet`):
 1. The release pointer (`latest.json`) resolves without error.
 2. Its schema_version is one this installed version supports (`SchemaChangedError` would fail this).
 3. Every table in the catalog downloads, verifies its checksum, and matches the manifest's
@@ -28,6 +29,10 @@ from pathlib import Path
 
 def run_checks() -> list[str]:
     """Returns a list of failure messages; empty means everything passed."""
+    return [*run_lahman_checks(), *run_retrosheet_checks()]
+
+
+def run_lahman_checks() -> list[str]:
     import fishbaseball as fb
     from fishbaseball.exceptions import FishbaseballError
 
@@ -56,6 +61,56 @@ def run_checks() -> list[str]:
         except FishbaseballError as e:
             failures.append(f"load({name!r}): {type(e).__name__}: {e}")
             print(f"FAIL  load({name!r}): {e}")
+
+    return failures
+
+
+RETROSHEET_SEASON = 2001  # a published season, large enough to be real, small enough to be quick
+
+
+def run_retrosheet_checks() -> list[str]:
+    """Same shape as the Lahman checks, for the partitioned source: the pointer resolves to a
+    release this package can read, and one partition of each partitioned table (the whole file
+    of the others) downloads, passes its SHA-256 check, and matches the manifest's columns —
+    all of which `load()` does as it fetches. Plus one known value, Bonds' 73 home runs."""
+    import fishbaseball as fb
+    from fishbaseball.exceptions import FishbaseballError
+
+    if not hasattr(fb, "retrosheet"):
+        print("skip  retrosheet: the installed fishbaseball predates fb.retrosheet")
+        return []
+
+    failures: list[str] = []
+
+    try:
+        tag = fb.retrosheet.version(refresh=True)
+        print(f"ok    retrosheet resolved release: {tag}")
+        names = fb.retrosheet.tables()
+        print(f"ok    retrosheet tables(): {len(names)} tables")
+    except FishbaseballError as e:
+        failures.append(f"retrosheet version()/tables(): {type(e).__name__}: {e}")
+        print(f"FAIL  retrosheet version()/tables(): {e}")
+        return failures
+
+    for name in names:
+        try:
+            # `seasons` is required by the partitioned tables and a plain filter on the rest
+            df = fb.retrosheet.load(name, seasons=RETROSHEET_SEASON, refresh=True)
+            print(f"ok    retrosheet load({name!r}): {df.height} rows")
+        except FishbaseballError as e:
+            failures.append(f"retrosheet load({name!r}): {type(e).__name__}: {e}")
+            print(f"FAIL  retrosheet load({name!r}): {e}")
+
+    try:
+        hr = fb.retrosheet.batting(RETROSHEET_SEASON, player_id="bondb001")["b_hr"].sum()
+        if hr != 73:
+            failures.append(f"retrosheet batting(2001, bondb001): {hr} home runs, expected 73")
+            print(f"FAIL  retrosheet golden value: Bonds {RETROSHEET_SEASON} hr = {hr}")
+        else:
+            print(f"ok    retrosheet golden value: Bonds {RETROSHEET_SEASON} hr = {hr}")
+    except FishbaseballError as e:
+        failures.append(f"retrosheet batting(): {type(e).__name__}: {e}")
+        print(f"FAIL  retrosheet batting(): {e}")
 
     return failures
 
