@@ -9,4 +9,5 @@ from __future__ import annotations
 
 SUPPORTED_SCHEMAS: dict[str, set[int]] = {
     "lahman": {1},
+    "retrosheet": {1},
 }

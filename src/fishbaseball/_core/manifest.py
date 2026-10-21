@@ -17,6 +17,58 @@ from fishbaseball.exceptions import IncompatibleDataError, SchemaChangedError
 DATE_PIN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+# ---- partitioned tables ---------------------------------------------------------------
+#
+# A manifest table entry is either one file (`url`, `sha256`, ...) or, for sources whose big
+# tables are published per season, `{"partitioned": true, "partitions": {"1927": {url,
+# sha256, bytes, rows, ...}, ...}, "columns": ..., "season_column": ...}`. Partition keys are
+# strings (the season) so they survive JSON; callers pass ints freely and `normalize_partition_keys`
+# makes them match.
+
+
+def is_partitioned(entry: dict[str, Any]) -> bool:
+    return bool(entry.get("partitioned"))
+
+
+def _natural(key: str) -> tuple[int, int | str]:
+    return (0, int(key)) if key.isdigit() else (1, key)
+
+
+def partition_keys(entry: dict[str, Any]) -> list[str]:
+    """A partitioned entry's partition keys, in numeric order for year-like keys."""
+    return sorted(entry["partitions"], key=_natural)
+
+
+def normalize_partition_keys(values: Any) -> list[str]:
+    """One partition, or any non-string iterable of them (list, `range`, generator, numpy
+    array, ...), as a deduplicated list of manifest keys in the order given. Ints and digit
+    strings are both fine (`2024` and `"2024"` are the same partition)."""
+    if isinstance(values, (str, bytes)) or not hasattr(values, "__iter__"):
+        values = [values]
+    keys: list[str] = []
+    for v in values:
+        if isinstance(v, bool) or not isinstance(v, (int, str)) and not hasattr(v, "__index__"):
+            raise TypeError(f"seasons must be integers (or digit strings), not {v!r}")
+        key = str(int(v)) if not isinstance(v, str) else v
+        if key not in keys:
+            keys.append(key)
+    return keys
+
+
+def describe_partitions(keys: list[str]) -> str:
+    """`["1897", "1898", "1899", "2001"]` -> `"1897-1899, 2001"`, for error messages."""
+    ordered = sorted(keys, key=_natural)
+    if not all(k.isdigit() for k in ordered):
+        return ", ".join(ordered)
+    runs: list[list[int]] = []
+    for n in map(int, ordered):
+        if runs and n == runs[-1][1] + 1:
+            runs[-1][1] = n
+        else:
+            runs.append([n, n])
+    return ", ".join(str(a) if a == b else (f"{a}, {b}" if b == a + 1 else f"{a}-{b}") for a, b in runs)
+
+
 @dataclass(frozen=True)
 class Resolved:
     tag: str

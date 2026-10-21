@@ -4,11 +4,17 @@ import pathlib
 import pytest
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "lahman"
+RETRO_FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "retrosheet"
 
 
 @pytest.fixture
 def fixtures() -> pathlib.Path:
     return FIXTURES
+
+
+@pytest.fixture
+def retro_fixtures() -> pathlib.Path:
+    return RETRO_FIXTURES
 
 
 def sha256_file(path: pathlib.Path) -> str:

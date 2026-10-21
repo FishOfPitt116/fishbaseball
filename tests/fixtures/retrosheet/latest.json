@@ -1,0 +1,29 @@
+{
+  "source": "retrosheet",
+  "latest": "retrosheet-2026-10-20",
+  "by_schema": {
+    "1": "retrosheet-2026-10-20"
+  },
+  "releases": [
+    {
+      "tag": "retrosheet-2026-10-20",
+      "version": "2026-10-20",
+      "schema_version": 1,
+      "built_at": "2026-10-20T23:49:09Z",
+      "withdrawn": false
+    }
+  ],
+  "upstream_seen": {
+    "1927": {
+      "etag": "\"3d1eca-6589f880f3b81\""
+    },
+    "1956": {
+      "etag": "\"3eb4aa-6589f89657caa\""
+    },
+    "2001": {
+      "etag": "\"96b736-6589f8bcd9b71\""
+    },
+    "checked_at": "2026-10-20T23:49:09Z"
+  },
+  "updated_at": "2026-10-20T23:49:09Z"
+}
