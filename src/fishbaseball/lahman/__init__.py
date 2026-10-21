@@ -9,8 +9,6 @@ so `dir(fishbaseball.lahman)` (and IDE autocomplete, which generally ignores `__
 only real, usable names.
 """
 
-from __future__ import annotations
-
 from datetime import datetime as _datetime
 from datetime import timezone as _timezone
 from typing import Any as _Any

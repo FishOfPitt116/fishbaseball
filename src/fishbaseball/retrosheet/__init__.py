@@ -38,8 +38,6 @@ Every import here that isn't part of the public surface is aliased with a leadin
 so `dir(fishbaseball.retrosheet)` shows only real, usable names.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass as _dataclass
 from datetime import datetime as _datetime
 from datetime import timezone as _timezone
