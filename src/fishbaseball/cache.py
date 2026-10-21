@@ -12,9 +12,15 @@ import polars as pl
 
 from fishbaseball import config
 from fishbaseball._client import get_client
-from fishbaseball._core.acquire import acquire_manifest, acquire_table
+from fishbaseball._core.acquire import (
+    acquire_manifest,
+    download_partitions,
+    download_table,
+    table_entry,
+)
 from fishbaseball._core.cache import Cache
 from fishbaseball._core.frames import to_backend
+from fishbaseball._core.manifest import is_partitioned
 from fishbaseball.sources import REGISTRY
 
 _INFO_SCHEMA = {
@@ -62,15 +68,31 @@ def purge(source: str | None = None, version: str | None = None) -> None:
 
 
 def prefetch(
-    source: str = "lahman", tables: list[str] | None = None, version: str | None = None
+    source: str = "lahman",
+    tables: list[str] | None = None,
+    version: str | None = None,
+    seasons: Any = None,
 ) -> None:
     """Download `tables` (default: every table in the source's manifest) for `version`
-    (default: the newest supported release), so a later `load()` needs no network."""
+    (default: the newest supported release), so a later `load()` needs no network.
+
+    `seasons` (one season, or a list / `range`; default: every published season) applies to
+    tables published in per-season partitions, i.e. Retrosheet's `plays`, `batting`,
+    `pitching`, `fielding` and `team_stats`; whole-file tables are always fetched in full.
+    The default for Retrosheet is therefore everything, about 1 GB; name `tables` and
+    `seasons` to take less."""
     if source not in REGISTRY:
         raise ValueError(f"unknown source {source!r}; known sources: {sorted(REGISTRY)}")
     spec = REGISTRY[source]
     cache = Cache()
     client = get_client()
-    manifest, _ = acquire_manifest(spec, cache, client, version=version)
+    offline = config.get("offline")
+    manifest, resolved = acquire_manifest(spec, cache, client, version=version)
     for table in tables or sorted(manifest["tables"]):
-        acquire_table(spec, table, cache, client, version=version)
+        entry = table_entry(manifest, spec, table)
+        if is_partitioned(entry):
+            download_partitions(
+                spec, table, entry, resolved, seasons, cache, client, offline=offline
+            )
+        else:
+            download_table(spec, table, entry, resolved, cache, client, offline=offline)
