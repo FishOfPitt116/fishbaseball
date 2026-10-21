@@ -245,7 +245,7 @@ def _find_fallback(cache: Cache, spec: SourceSpec, table: str, exclude_tag: str)
     return max(candidates) if candidates else None
 
 
-def _table_entry(manifest: dict[str, Any], spec: SourceSpec, table: str) -> dict[str, Any]:
+def table_entry(manifest: dict[str, Any], spec: SourceSpec, table: str) -> dict[str, Any]:
     if table not in manifest["tables"]:
         close = difflib.get_close_matches(table, manifest["tables"], n=1)
         hint = f"; did you mean {close[0]!r}?" if close else ""
@@ -272,11 +272,26 @@ def acquire_table(
     manifest, resolved = acquire_manifest(
         spec, cache, client, version=version, refresh=refresh, offline=offline, now=now
     )
-    entry = _table_entry(manifest, spec, table)
+    entry = table_entry(manifest, spec, table)
     if is_partitioned(entry):
         raise ValueError(
             f"{spec.name} {table!r} is published in per-season partitions; use acquire_partitions()"
         )
+    return download_table(spec, table, entry, resolved, cache, client, offline=offline)
+
+
+def download_table(
+    spec: SourceSpec,
+    table: str,
+    entry: dict[str, Any],
+    resolved: Resolved,
+    cache: Cache,
+    client: Any,
+    *,
+    offline: bool,
+) -> Acquired:
+    """The verified local file for a whole-file table whose release is already resolved
+    (`acquire_manifest`), with the fallback rules in this module's docstring."""
     path = cache.table_path(spec.name, resolved.tag, table)
 
     if _cached_and_verified(cache, spec.name, resolved.tag, table, entry["sha256"]):
@@ -386,7 +401,24 @@ def acquire_partitions(
     manifest, resolved = acquire_manifest(
         spec, cache, client, version=version, refresh=refresh, offline=offline, now=now
     )
-    entry = _table_entry(manifest, spec, table)
+    entry = table_entry(manifest, spec, table)
+    return download_partitions(
+        spec, table, entry, resolved, partitions, cache, client, offline=offline
+    )
+
+
+def download_partitions(
+    spec: SourceSpec,
+    table: str,
+    entry: dict[str, Any],
+    resolved: Resolved,
+    partitions: Any,
+    cache: Cache,
+    client: Any,
+    *,
+    offline: bool,
+) -> list[Acquired]:
+    """`acquire_partitions` for a release that is already resolved (`acquire_manifest`)."""
     if not is_partitioned(entry):
         raise ValueError(f"{spec.name} {table!r} is not partitioned; use acquire_table()")
 
