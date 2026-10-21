@@ -48,7 +48,7 @@ def test_partition_keys_are_sorted_numerically(retro_fixtures):
 
 def test_retrosheet_fixture_files_match_the_manifest(retro_fixtures):
     tables = retro_manifest(retro_fixtures)["tables"]
-    for name, entry in tables.items():
+    for entry in tables.values():
         files = [e for e in entry["partitions"].values()] if is_partitioned(entry) else [entry]
         for f in files:
             assert sha256_file(retro_fixtures / f["file"]) == f["sha256"]

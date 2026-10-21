@@ -22,13 +22,16 @@ _INFO_SCHEMA = {
     "version": pl.Utf8,
     "table": pl.Utf8,
     "bytes": pl.Int64,
+    "partitions": pl.Int64,
     "last_checked": pl.Datetime(time_zone="UTC"),
     "next_check": pl.Datetime(time_zone="UTC"),
 }
 
 
 def info() -> Any:
-    """One row per cached (source, version, table): how big it is on disk, when that source's
+    """One row per cached (source, version, table): how big it is on disk (and, for a table
+    published in per-season partitions, how many of those partition files are cached —
+    `partitions`, else `None`), when that source's
     release pointer was last checked, and when it's next due to be rechecked (`last_checked +
     fb.config.set(ttl=...)`; both `None` if that source has never been checked). Empty (but
     correctly shaped) if nothing has been loaded yet. Reads only the local cache — never makes

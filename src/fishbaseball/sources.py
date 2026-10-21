@@ -28,13 +28,9 @@ _SCHEMA = {
 def _local_version(cache: Cache, source: str) -> str | None:
     """The newest tag that actually has a manifest cached on disk (not just referenced by a
     pointer) — what you have, as opposed to `latest`, which is what's published."""
-    source_dir = cache.source_dir(source)
-    if not source_dir.is_dir():
-        return None
     tags = [
-        d.name for d in source_dir.iterdir()
-        if d.is_dir() and cache.manifest_path(source, d.name).exists()
-    ]  # fmt: skip
+        d.name for d in cache.release_dirs(source) if cache.manifest_path(source, d.name).exists()
+    ]
     return max(tags) if tags else None
 
 

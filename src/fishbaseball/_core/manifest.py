@@ -66,7 +66,9 @@ def describe_partitions(keys: list[str]) -> str:
             runs[-1][1] = n
         else:
             runs.append([n, n])
-    return ", ".join(str(a) if a == b else (f"{a}, {b}" if b == a + 1 else f"{a}-{b}") for a, b in runs)
+    return ", ".join(
+        str(a) if a == b else (f"{a}, {b}" if b == a + 1 else f"{a}-{b}") for a, b in runs
+    )
 
 
 @dataclass(frozen=True)

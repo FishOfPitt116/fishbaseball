@@ -223,13 +223,10 @@ def _find_fallback(cache: Cache, spec: SourceSpec, table: str, exclude_tag: str)
     """The newest other cached release with a checksum-verified copy of `table`. Tags sort
     correctly as plain strings: `<source>-YYYY-MM-DD` sorts before its own `-2`, `-3`, ...
     same-day suffixes."""
-    source_dir = cache.source_dir(spec.name)
-    if not source_dir.is_dir():
-        return None
     candidates = []
-    for version_dir in source_dir.iterdir():
+    for version_dir in cache.release_dirs(spec.name):
         tag = version_dir.name
-        if tag == exclude_tag or not version_dir.is_dir():
+        if tag == exclude_tag:
             continue
         manifest = cache.read_json(cache.manifest_path(spec.name, tag))
         entry = (manifest or {}).get("tables", {}).get(table)

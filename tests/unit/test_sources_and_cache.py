@@ -68,7 +68,7 @@ def test_cache_info_empty_by_default():
     df = fb_cache.info()
     assert isinstance(df, pl.DataFrame) and df.height == 0
     assert set(df.columns) == {
-        "source", "version", "table", "bytes", "last_checked", "next_check",
+        "source", "version", "table", "bytes", "partitions", "last_checked", "next_check",
     }  # fmt: skip
 
 
