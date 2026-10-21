@@ -19,8 +19,8 @@ Data is mirrored, validated and published by github.com/FishOfPitt116/fishbaseba
 that repo's README for the pipeline and full license text.
 """
 
-from fishbaseball import cache, config, lahman
+from fishbaseball import cache, config, lahman, retrosheet
 from fishbaseball._version import __version__
 from fishbaseball.sources import sources
 
-__all__ = ["__version__", "config", "cache", "lahman", "sources"]
+__all__ = ["__version__", "config", "cache", "lahman", "retrosheet", "sources"]

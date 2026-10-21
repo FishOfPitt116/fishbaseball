@@ -22,17 +22,20 @@ def to_backend(df: pl.DataFrame, backend: str) -> Any:
     raise ValueError(f"unknown backend {backend!r}")
 
 
+def as_list(values: Any) -> list[Any]:
+    """One value, or any non-string iterable of values, as a list."""
+    if isinstance(values, (str, bytes)) or not hasattr(values, "__iter__"):
+        return [values]
+    return list(values)
+
+
 def filter_values(df: Frame, column: str, values: Any) -> Frame:
     """`values` may be `None` (no filter), a single value, or any non-string iterable of
     values — a list, tuple, set, `range`, generator, numpy array, and so on. A string or
     bytes value is treated as one value, not iterated character by character."""
     if values is None:
         return df
-    if isinstance(values, (str, bytes)) or not hasattr(values, "__iter__"):
-        values = [values]
-    else:
-        values = list(values)
-    return df.filter(pl.col(column).is_in(values))
+    return df.filter(pl.col(column).is_in(as_list(values)))
 
 
 def scan_files(paths: Iterable[Path]) -> pl.LazyFrame:

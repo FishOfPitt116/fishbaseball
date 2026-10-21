@@ -13,8 +13,12 @@ from fishbaseball._core.acquire import SourceSpec
 from fishbaseball._core.cache import Cache
 from fishbaseball._core.frames import to_backend
 from fishbaseball.lahman._source import SOURCE as _LAHMAN_SOURCE
+from fishbaseball.retrosheet._source import SOURCE as _RETROSHEET_SOURCE
 
-REGISTRY: dict[str, SourceSpec] = {"lahman": _LAHMAN_SOURCE}
+REGISTRY: dict[str, SourceSpec] = {
+    "lahman": _LAHMAN_SOURCE,
+    "retrosheet": _RETROSHEET_SOURCE,
+}
 
 _SCHEMA = {
     "source": pl.Utf8,
