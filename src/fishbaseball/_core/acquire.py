@@ -20,6 +20,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,7 +31,15 @@ import polars as pl
 from fishbaseball import config
 from fishbaseball._compat import SUPPORTED_SCHEMAS
 from fishbaseball._core.cache import Cache
-from fishbaseball._core.manifest import DATE_PIN, Resolved, resolve
+from fishbaseball._core.manifest import (
+    DATE_PIN,
+    Resolved,
+    describe_partitions,
+    is_partitioned,
+    normalize_partition_keys,
+    partition_keys,
+    resolve,
+)
 from fishbaseball.exceptions import (
     ChecksumError,
     DataNotAvailableError,
@@ -54,6 +63,7 @@ class Acquired:
     fetched_at: datetime
     from_cache: bool
     fallback_reason: str | None = None
+    partition: str | None = None  # the season, for a file from a partitioned table
 
 
 def release_url(repo: str, tag: str, filename: str) -> str:
@@ -235,6 +245,17 @@ def _find_fallback(cache: Cache, spec: SourceSpec, table: str, exclude_tag: str)
     return max(candidates) if candidates else None
 
 
+def _table_entry(manifest: dict[str, Any], spec: SourceSpec, table: str) -> dict[str, Any]:
+    if table not in manifest["tables"]:
+        close = difflib.get_close_matches(table, manifest["tables"], n=1)
+        hint = f"; did you mean {close[0]!r}?" if close else ""
+        raise ValueError(
+            f"unknown table {table!r} for {spec.name}{hint} "
+            f"known tables: {sorted(manifest['tables'])}"
+        )
+    return manifest["tables"][table]
+
+
 def acquire_table(
     spec: SourceSpec,
     table: str,
@@ -251,14 +272,11 @@ def acquire_table(
     manifest, resolved = acquire_manifest(
         spec, cache, client, version=version, refresh=refresh, offline=offline, now=now
     )
-    if table not in manifest["tables"]:
-        close = difflib.get_close_matches(table, manifest["tables"], n=1)
-        hint = f"; did you mean {close[0]!r}?" if close else ""
+    entry = _table_entry(manifest, spec, table)
+    if is_partitioned(entry):
         raise ValueError(
-            f"unknown table {table!r} for {spec.name}{hint} "
-            f"known tables: {sorted(manifest['tables'])}"
+            f"{spec.name} {table!r} is published in per-season partitions; use acquire_partitions()"
         )
-    entry = manifest["tables"][table]
     path = cache.table_path(spec.name, resolved.tag, table)
 
     if _cached_and_verified(cache, spec.name, resolved.tag, table, entry["sha256"]):
@@ -291,3 +309,141 @@ def acquire_table(
 
 def _mtime(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+
+
+# ---- partitioned tables ---------------------------------------------------------------------
+
+MAX_PARALLEL_DOWNLOADS = 4
+
+
+def _object_ok(cache: Cache, source: str, partition: dict[str, Any]) -> bool:
+    path = cache.object_path(source, partition["sha256"])
+    return path.exists() and _sha256_file(path) == partition["sha256"]
+
+
+def _find_partition_fallback(
+    cache: Cache, spec: SourceSpec, table: str, key: str, exclude_tag: str
+) -> tuple[str, Path] | None:
+    """The newest other cached release that has a verified copy of this partition."""
+    for version_dir in sorted(cache.release_dirs(spec.name), reverse=True):
+        tag = version_dir.name
+        if tag == exclude_tag:
+            continue
+        manifest = cache.read_json(cache.manifest_path(spec.name, tag))
+        partition = (
+            ((manifest or {}).get("tables", {}).get(table) or {}).get("partitions") or {}
+        ).get(key)
+        if partition and _object_ok(cache, spec.name, partition):
+            return tag, cache.object_path(spec.name, partition["sha256"])
+    return None
+
+
+def _fetch_partition(
+    client: Any, cache: Cache, spec: SourceSpec, partition: dict[str, Any], columns: dict[str, str]
+) -> Exception | None:
+    """Download one partition into the object store, verified (checksum, then columns). The
+    error, if any, is returned rather than raised so a thread pool can collect all of them."""
+    path = cache.object_path(spec.name, partition["sha256"])
+    path.unlink(missing_ok=True)  # a stale or corrupt copy must not look verified
+    try:
+        client.download(partition["url"], path, sha256=partition["sha256"])
+        _verify_table_schema(path, columns)
+    except IncompatibleDataError as e:
+        path.unlink(missing_ok=True)  # the store only ever holds verified files
+        return e
+    except (SourceUnavailableError, ChecksumError) as e:
+        return e
+    return None
+
+
+def acquire_partitions(
+    spec: SourceSpec,
+    table: str,
+    partitions: Any,
+    cache: Cache,
+    client: Any,
+    *,
+    version: str | None = None,
+    refresh: bool = False,
+    offline: bool | None = None,
+    now: datetime | None = None,
+) -> list[Acquired]:
+    """Verified local Parquet files for the requested partitions (seasons) of a partitioned
+    table, in the order requested (`partitions=None` means every partition).
+
+    The release is resolved exactly as for `acquire_table`. Each partition is a file in the
+    content-addressed object store (`Cache.object_path`): one whose bytes already match the
+    manifest's SHA-256 is reused — even if it was downloaded for an older release that
+    published the same partition — and the rest are downloaded, at most
+    `MAX_PARALLEL_DOWNLOADS` at a time, and checked for SHA-256 and columns before being moved
+    in. A partition that can't be fetched falls back to the newest other cached release's
+    verified copy, with one `StaleDataWarning` naming every such partition (`strict` raises
+    instead); with no such copy, `DataNotAvailableError`. Asking for a partition the release
+    doesn't have raises `DataNotAvailableError` naming the ones it does.
+    """
+    now = now or datetime.now(timezone.utc)
+    offline = _resolve_offline(offline)
+    manifest, resolved = acquire_manifest(
+        spec, cache, client, version=version, refresh=refresh, offline=offline, now=now
+    )
+    entry = _table_entry(manifest, spec, table)
+    if not is_partitioned(entry):
+        raise ValueError(f"{spec.name} {table!r} is not partitioned; use acquire_table()")
+
+    available = partition_keys(entry)
+    keys = available if partitions is None else normalize_partition_keys(partitions)
+    unknown = [k for k in keys if k not in entry["partitions"]]
+    if unknown:
+        raise DataNotAvailableError(
+            f"{spec.name} {table}: no data for {', '.join(unknown)} in {resolved.tag}; "
+            f"available: {describe_partitions(available)}"
+        )
+
+    found: dict[str, Acquired] = {}
+    missing: list[str] = []
+    for key in keys:
+        partition = entry["partitions"][key]
+        if _object_ok(cache, spec.name, partition):
+            path = cache.object_path(spec.name, partition["sha256"])
+            found[key] = Acquired(path, resolved.tag, _mtime(path), True, partition=key)
+        else:
+            missing.append(key)
+
+    if missing and offline:
+        raise DataNotAvailableError(
+            f"{spec.name} {table} {resolved.tag}: {', '.join(missing)} not cached and offline=True"
+        )
+
+    def fetch(key: str) -> Exception | None:
+        return _fetch_partition(client, cache, spec, entry["partitions"][key], entry["columns"])
+
+    if len(missing) > 1:
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_DOWNLOADS) as pool:
+            errors = list(pool.map(fetch, missing))
+    else:
+        errors = [fetch(key) for key in missing]
+
+    fell_back: list[tuple[str, Exception]] = []
+    for key, error in zip(missing, errors, strict=True):
+        if error is None:
+            path = cache.object_path(spec.name, entry["partitions"][key]["sha256"])
+            found[key] = Acquired(path, resolved.tag, _mtime(path), False, partition=key)
+            continue
+        fallback = _find_partition_fallback(cache, spec, table, key, exclude_tag=resolved.tag)
+        if fallback is None:
+            raise DataNotAvailableError(
+                f"{spec.name} {table} {key} {resolved.tag}: could not fetch it, and no usable "
+                "cached version exists"
+            ) from error
+        tag, path = fallback
+        found[key] = Acquired(path, tag, _mtime(path), True, str(error), partition=key)
+        fell_back.append((key, error))
+
+    if fell_back:
+        names = ", ".join(key for key, _ in fell_back)
+        _warn_or_raise(
+            StaleDataWarning(
+                f"{spec.name} {table}: using older cached data for {names} ({fell_back[0][1]})"
+            )
+        )
+    return [found[key] for key in keys]
